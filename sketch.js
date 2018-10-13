@@ -203,10 +203,13 @@ function VoxelScape(vs){
               headers:{
                 "Content-Type": "application/json"
               }
-            }
+            },
+            function(res){
+              setTimeout(function(){
+                        window.location.reload(true);
+                    },100);
+            } 
       );
-      window.location.href=window.location.href;
-      location.href=location.href;
 
       exportJSON=false;
 
