@@ -2,13 +2,16 @@ var layout, sound, att, gui, bt;
 var attXfactor = 7;
 var attYfactor = 9;
 
-var addDiameter = 40;
+var addDiameter = 200;
 var addName = "新姓名";
-var exportJSON = false;
+
+var voxelsJSON = false;
+var particlesJSON = false;
 
 // object
 var voxelmap = {};
-var voxellayout; 
+var voxellayout;
+var particlesystem; 
 
 // spreadsheet url
 var ssurl = "https://spreadsheets.google.com/feeds/list/1zrnd9KFyOtJ2ckW8WoxNEqXKoGJfm31e7m8eaOKZQWw/od6/public/values?alt=json";
@@ -43,22 +46,25 @@ function encodejson(voxels){
 }
 
 function setup() {
-    createCanvas(1920, 768);
-    print(voxelmap.voxels);
+    createCanvas(1440, 640);
+    ellipseMode(CENTER);
     voxellayout = new VoxelScape(importData(voxelmap));
-    
+    particlesystem = new ParticleScape();
+    particlesystem.randomlayout(100);
+
     att = new Attrator();
 
 
     //GUI
     gui = createGui("新渦點");
 
-    sliderRange(35, 90, 1);
+    sliderRange(120, 500, 10);
     gui.addGlobals("addDiameter");
 
     gui.addGlobals("addName");
 
-    gui.addGlobals("exportJSON")
+    gui.addGlobals("voxelsJSON")
+    gui.addGlobals("particlesJSON")
   /*  
     sliderRange(3, 12, 1);
     gui.addGlobals('attXfactor');
@@ -73,6 +79,7 @@ function draw() {
   background(225, 225, 225, 75);
   //clear();
       voxellayout.display();
+      particlesystem.display(voxellayout,particlesystem);
       //att.display();
   //push();
       
@@ -111,6 +118,112 @@ function importData(voxelmap) {
   return vm;
 }
 
+// 分子
+function Particle(x,y,t) {
+  
+  this.x = x;
+  this.y = y;
+  this.diameter = 10;
+  this.occupy = 100;
+  this.occupytol = 5;
+  this.type=t;
+
+  this.speed = 0.1;
+  this.life = this.diameter;
+
+  this.triggered = false;
+  this.over = false;
+  this.dingdong = sound[0];
+
+  //運動
+  this.particleout = function(p) {
+    let d = dist(p.x, p.y, this.x, this.y);
+    if (d < this.occupy && d>0) {
+      stroke(200);
+      line(p.x, p.y, this.x, this.y);
+      return [(p.x-this.x)*this.occupytol/this.occupy,(p.y-this.y)*this.occupytol/this.occupy];
+    } else {
+      return [0,0];
+    }
+  }
+
+  this.force = function(vs,ps){
+    let nx=0;
+    let ny=0;
+    //print(vs.count);
+    for (let i=0;i<vs.voxels.length;i+=1){
+      nx+= vs.voxels[i].particlein(this)[0];
+      ny+= vs.voxels[i].particlein(this)[1];
+    }
+    for (let i=0;i<ps.particles.length;i+=1){
+      nx+= ps.particles[i].particleout(this)[0];
+      ny+= ps.particles[i].particleout(this)[1];
+    }
+    this.x+=nx*this.speed;
+    this.y+=ny*this.speed;
+  }
+
+  // 顯示
+  this.display = function() {
+    //顯現
+    noStroke();
+    fill(this.diameter,0,0,75);
+    ellipse(this.x, this.y, this.diameter, this.diameter);
+    
+  }
+}
+
+// Scape
+function ParticleScape(){
+  this.particles = [];
+  
+  this.randomlayout = function(num){
+    for(let i=0;i<num;i+=1){
+      this.add(random(width),random(height));
+    }
+  }
+
+  this.add =function(px,py,t){
+    this.particles.push(new Particle(px,py,t));
+  };
+
+  //輸出Json
+  this.export = function(){
+    if (particlesJSON) {
+      let psjson ={};
+      let psstr = "";
+
+      for (let i=0;i<this.particles.length;i+=1) {
+        psstr+= this.particles[i].x+","+this.particles[i].y+","+this.particles[i].diameter+","+this.particles[i].type;
+        if (i!=this.particles.length-1){
+          psstr+=";"
+        }
+      }
+      //print(psstr);
+      // 輸出到spreadsheet
+      var exportout = {
+              data: psstr,
+              sheetUrl: 'https://docs.google.com/spreadsheets/d/1zrnd9KFyOtJ2ckW8WoxNEqXKoGJfm31e7m8eaOKZQWw/edit?usp=sharing',
+              sheetTag: 'particles'
+      };
+      $.get('https://script.google.com/macros/s/AKfycbz-nu15UEEN4xoEcdOigexX_2SnJQS7vqryIt-Ivp923oiKXsI/exec', exportout);
+
+      particlesJSON=false;
+
+    }
+  }
+
+  this.display =function(vs,ps){
+    for (let i=0;i<this.particles.length;i+=1) {
+      //print("t");
+      this.particles[i].force(vs,ps);
+      this.particles[i].display();
+      //this.voxels[i].rollover(mouseX,mouseY);
+    }
+    this.export(); 
+  };
+}
+
 
 // 渦點
 function Voxel(x,y,d, l) {
@@ -130,18 +243,26 @@ function Voxel(x,y,d, l) {
   // 滑鼠移入
   this.rollover = function(px, py) {
     let d = dist(px, py, this.x, this.y);
-    if (d < this.diameter) {
+    if (d < this.diameter/2) {
       this.over = true;
     } else {
       this.over = false;
     }
   };
-
+  // 分子移入
+  this.particlein = function(p) {
+    let d = dist(p.x, p.y, this.x, this.y);
+    if (d < this.diameter/2) {
+      return [(this.x-p.x)/this.diameter,(this.y-p.y)/this.diameter];
+    } else {
+      return [0,0];
+    }
+  };
   // 顯示
   this.display = function() {
     //原有
     noStroke();
-    fill(d,d,d,50);
+    fill(this.diameter,this.diameter,this.diameter,50);
     ellipse(this.x, this.y, this.diameter, this.diameter); 
     if (this.over) {
       fill(0);
@@ -199,7 +320,7 @@ function VoxelScape(vs){
 
   //輸出Json
   this.export = function(){
-    if (exportJSON) {
+    if (voxelsJSON) {
       let vsjson ={};
       let vsarray = [];
       let vsstr = "";
@@ -209,76 +330,17 @@ function VoxelScape(vs){
         if (i!=this.voxels.length-1){
           vsstr+=";"
         }
-        /*
-        let vjson = {};
-        let vjp={};
-          vjp.positionx= this.voxels[i].x;
-          vjp.positiony= this.voxels[i].y;
-        vjson.position = vjp;
-        vjson.diameter = this.voxels[i].diameter;
-        vjson.label = this.voxels[i].name;
-
-        vsarray.push(vjson);
-        */
       }
-      //vsjson.voxels = vsarray;
 
-// send data out
+      // 輸出到spreadsheet
       var exportout = {
               data: vsstr,
               sheetUrl: 'https://docs.google.com/spreadsheets/d/1zrnd9KFyOtJ2ckW8WoxNEqXKoGJfm31e7m8eaOKZQWw/edit?usp=sharing',
               sheetTag: 'voxels'
-          };
-          $.get('https://script.google.com/macros/s/AKfycbz-nu15UEEN4xoEcdOigexX_2SnJQS7vqryIt-Ivp923oiKXsI/exec', exportout);
-/*
-      $.get(exeurl, {
-          mode: "no-cors"
-          data: "2,33,44,55,fad",
-          sheetUrl: "https://docs.google.com/spreadsheets/d/1zrnd9KFyOtJ2ckW8WoxNEqXKoGJfm31e7m8eaOKZQWw/edit?usp=sharing",
-          sheetTag: "voxels"
-        } 
-        );
-      //$(function() {
-*/
-      //});
-/*
-      httpDo(exeurl, 
-            {
-              method: "POST", // *GET, POST, PUT, DELETE, etc.
-              body: JSON.stringify(vsjson), // data can be `string` or {object}!
-              headers:{
-                "Content-Type": "application/json"
-              }
-            },
-            function(res){
-              alert('v');
-            } 
-      );
-*/
-/*
-       $.ajax({
-        url: exeurl,
-        method: "GET",
-        dataType: "json",
-        data: vsjson
-        });
-      //saveJSON(vsjson, 'voxelmap.json');
-      /*
-      let url = "./assets/dataupload.js";
-      httpDo(url, 
-            {
-              method: "POST", // *GET, POST, PUT, DELETE, etc.
-              body: JSON.stringify(vsjson), // data can be `string` or {object}!
-              headers:{
-                "Content-Type": "application/json"
-              }
-            },
-            function(res){
-              alert('v');
-            } 
-      );
-      */
-      exportJSON=false;
+      };
+      $.get('https://script.google.com/macros/s/AKfycbz-nu15UEEN4xoEcdOigexX_2SnJQS7vqryIt-Ivp923oiKXsI/exec', exportout);
+
+      voxelsJSON=false;
 
     }
   }
@@ -291,6 +353,10 @@ function VoxelScape(vs){
     this.export(); 
   };
 }
+
+
+
+
 function Attrator(){
   this.t=0;
   this.x=0;
