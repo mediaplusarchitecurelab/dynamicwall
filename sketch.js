@@ -9,6 +9,10 @@ var exportJSON = false;
 // object
 var voxelmap = {};
 var voxellayout; 
+
+// spreadsheet url
+var ssurl = "https://spreadsheets.google.com/feeds/list/1zrnd9KFyOtJ2ckW8WoxNEqXKoGJfm31e7m8eaOKZQWw/od6/public/values?alt=json";
+var exeurl = "https://script.google.com/macros/s/AKfycbz-nu15UEEN4xoEcdOigexX_2SnJQS7vqryIt-Ivp923oiKXsI/exec";
 // preload
 function preload() {
   soundFormats("mp3", "ogg");
@@ -17,12 +21,31 @@ function preload() {
             loadSound("./assets/Mixdown_EG.ogg"),
             loadSound("./assets/Mixdown_CCC.ogg")
           ];
-  voxelmap=loadJSON('./assets/voxelmap.json');
+  loadJSON(ssurl, encodejson);
+
+}
+// 輸入spread的工作表名稱
+function encodejson(voxels){
+  let vs = [];
+
+  for (let i = 0; i < voxels.feed.entry.length; i+=1) {
+    let p = {   "x": int(voxels.feed.entry[i].gsx$positionx.$t),
+                "y": int(voxels.feed.entry[i].gsx$positiony.$t)
+            }
+    let  v= {
+                "position": p,
+                "diameter": int(voxels.feed.entry[i].gsx$diameter.$t),
+                "label": voxels.feed.entry[i].gsx$label.$t
+            }
+    vs.push(v);
+  }
+  voxelmap.voxels=vs;
 }
 
 function setup() {
     createCanvas(1920, 768);
-    voxellayout = new VoxelScape(importData());
+    print(voxelmap.voxels);
+    voxellayout = new VoxelScape(importData(voxelmap));
     
     att = new Attrator();
 
@@ -64,7 +87,7 @@ function draw() {
 }
 
 // import data from JSON
-function importData() {
+function importData(voxelmap) {
   let vm=[];
   let dataMap = voxelmap["voxels"];
   for (let i = 0; i < dataMap.length; i+=1) {
@@ -179,23 +202,69 @@ function VoxelScape(vs){
     if (exportJSON) {
       let vsjson ={};
       let vsarray = [];
+      let vsstr = "";
 
       for (let i=0;i<this.voxels.length;i+=1) {
+        vsstr+= this.voxels[i].x+","+this.voxels[i].y+","+this.voxels[i].diameter+","+this.voxels[i].name;
+        if (i!=this.voxels.length-1){
+          vsstr+=";"
+        }
+        /*
         let vjson = {};
         let vjp={};
-          vjp.x= this.voxels[i].x;
-          vjp.y= this.voxels[i].y;
+          vjp.positionx= this.voxels[i].x;
+          vjp.positiony= this.voxels[i].y;
         vjson.position = vjp;
         vjson.diameter = this.voxels[i].diameter;
         vjson.label = this.voxels[i].name;
 
         vsarray.push(vjson);
+        */
       }
-      vsjson.voxels = vsarray;
+      //vsjson.voxels = vsarray;
 
+// send data out
+      var exportout = {
+              data: vsstr,
+              sheetUrl: 'https://docs.google.com/spreadsheets/d/1zrnd9KFyOtJ2ckW8WoxNEqXKoGJfm31e7m8eaOKZQWw/edit?usp=sharing',
+              sheetTag: 'voxels'
+          };
+          $.get('https://script.google.com/macros/s/AKfycbz-nu15UEEN4xoEcdOigexX_2SnJQS7vqryIt-Ivp923oiKXsI/exec', exportout);
+/*
+      $.get(exeurl, {
+          mode: "no-cors"
+          data: "2,33,44,55,fad",
+          sheetUrl: "https://docs.google.com/spreadsheets/d/1zrnd9KFyOtJ2ckW8WoxNEqXKoGJfm31e7m8eaOKZQWw/edit?usp=sharing",
+          sheetTag: "voxels"
+        } 
+        );
+      //$(function() {
+*/
+      //});
+/*
+      httpDo(exeurl, 
+            {
+              method: "POST", // *GET, POST, PUT, DELETE, etc.
+              body: JSON.stringify(vsjson), // data can be `string` or {object}!
+              headers:{
+                "Content-Type": "application/json"
+              }
+            },
+            function(res){
+              alert('v');
+            } 
+      );
+*/
+/*
+       $.ajax({
+        url: exeurl,
+        method: "GET",
+        dataType: "json",
+        data: vsjson
+        });
       //saveJSON(vsjson, 'voxelmap.json');
-      
-      let url = "./assets/dataupload.php";
+      /*
+      let url = "./assets/dataupload.js";
       httpDo(url, 
             {
               method: "POST", // *GET, POST, PUT, DELETE, etc.
@@ -205,12 +274,10 @@ function VoxelScape(vs){
               }
             },
             function(res){
-              setTimeout(function(){
-                        window.location.reload(true);
-                    },100);
+              alert('v');
             } 
       );
-
+      */
       exportJSON=false;
 
     }
@@ -247,7 +314,10 @@ function mousePressed() {
   //let label = 'New Label';
 
   // Append the new JSON bubble object to the array
-  voxellayout.add(mouseX, mouseY, addDiameter, addName);
+  if (mouseX<220 && mouseY<200){}
+  else{
+    voxellayout.add(mouseX, mouseY, addDiameter, addName);
+  }
 
 }
 
